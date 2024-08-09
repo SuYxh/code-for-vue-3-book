@@ -79,6 +79,14 @@ const renderer = createRenderer({
   insert(el, parent, anchor = null) {
     parent.insertBefore(el, anchor)
   },
+  /**
+   * @description: 
+   * @param {*} el： 目标 DOM 元素，属性将被应用到这个元素上。
+   * @param {*} key： 属性的名称。
+   * @param {*} preValue： 属性的旧值（之前的值）
+   * @param {*} nextValue： 属性的新值（将要设置的值）。
+   * @return {*}
+   */  
   patchProps(el, key, preValue, nextValue) {
     if (shouldSetAsProps(el, key, nextValue)) {
       const type = typeof el[key]

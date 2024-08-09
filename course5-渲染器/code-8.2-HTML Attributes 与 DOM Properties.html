@@ -17,7 +17,11 @@ function createRenderer(options) {
   } = options
 
   function shouldSetAsProps(el, key, value) {
+    //  特殊处理: 我们对 <input form="xxx" />进行特殊处理，即 <input/>标签的 form 属性必须使用 setAttribute 函数来设置
+    // <form id="form1"></form>
+    // <input form="form1" />
     if (key === 'form' && el.tagName === 'INPUT') return false
+     // 用 in 操作符判断 key 是否存在对应的 DOM Properties
     return key in el
   }
 
@@ -36,12 +40,14 @@ function createRenderer(options) {
         const value = vnode.props[key]
         if (shouldSetAsProps(el, key, value)) {
           const type = typeof el[key]
+           // 如果是布尔类型，并且 value 是空字符串，则将值矫正为 true
           if (type === 'boolean' && value === '') {
             el[key] = true
           } else {
             el[key] = value
           }
         } else {
+           // 如果要设置的属性没有对应的 DOM Properties，则使用 setAttribute 函数设置属性
           el.setAttribute(key, vnode.props[key])
         }
       }
