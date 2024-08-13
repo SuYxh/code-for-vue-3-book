@@ -1,5 +1,10 @@
 <div id="app"></div>
 
+<div data-a="3" mmm="asdf" draggable="true"></div>
+
+<form id="aaa"></form>
+<input value="aaa" form="aaa" />
+
 <script src="https://unpkg.com/@vue/reactivity@3.0.5/dist/reactivity.global.js"></script>
 <script>
 
@@ -62,6 +67,7 @@ function createRenderer(options) {
 
   function patch(n1, n2, container) {
     if (n1 && n1.type !== n2.type) {
+    // 如果新旧 vnode 的类型不同，则直接将旧 vnode卸载
       unmount(n1)
       n1 = null
     }
@@ -108,29 +114,8 @@ const renderer = createRenderer({
   insert(el, parent, anchor = null) {
     parent.insertBefore(el, anchor)
   },
-  patchProps(el, key, prevValue, nextValue) {
-    if (/^on/.test(key)) {
-      const invokers = el._vei || (el._vei = {})
-      let invoker = invokers[key]
-      const name = key.slice(2).toLowerCase()
-      if (nextValue) {
-        if (!invoker) {
-          invoker = el._vei[key] = (e) => {
-            if (Array.isArray(invoker.value)) {
-              invoker.value.forEach(fn => fn(e))
-            } else {
-              invoker.value(e)
-            }
-          }
-          invoker.value = nextValue
-          el.addEventListener(name, invoker)
-        } else {
-          invoker.value = nextValue
-        }
-      } else if (invoker) {
-        el.removeEventListener(name, invoker)
-      }
-    } else if (key === 'class') {
+  patchProps(el, key, preValue, nextValue) {
+    if (key === 'class') {
       el.className = nextValue || ''
     } else if (shouldSetAsProps(el, key, nextValue)) {
       const type = typeof el[key]
@@ -148,33 +133,22 @@ const renderer = createRenderer({
 const vnode = {
   type: 'p',
   props: {
-    onClick: [
-      () => {
-        alert('clicked 1')
-      },
-      () => {
-        alert('clicked 2')
-      }
-    ]
+    class: 'foo bar baz'
   },
   children: 'text'
 }
 renderer.render(vnode, document.querySelector('#app'))
 
-// const newVnode = {
-//   type: 'p',
-//   props: {
-//     onContextmenu: () => {
-//       alert('contextmenu')
-//     }
-//   },
-//   children: 'text'
-// }
-// setTimeout(() => {
-//   renderer.render(newVnode, document.querySelector('#app'))
-//   console.log('update')
-// }, 1000)
-
+const newVnode = {
+  type: 'div',
+  props: {
+    id: 'foo'
+  },
+  children: 'hello'
+}
+setTimeout(() => {
+  renderer.render(newVnode, document.querySelector('#app'))  
+}, 1000);
 
 
 </script>
