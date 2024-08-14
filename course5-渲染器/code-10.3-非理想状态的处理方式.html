@@ -57,6 +57,7 @@ function createRenderer(options) {
   function patchKeyedChildren(n1, n2, container) {
     const oldChildren = n1.children
     const newChildren = n2.children
+    
     let oldStartIdx = 0
     let oldEndIdx = oldChildren.length - 1
     let newStartIdx = 0
@@ -68,6 +69,7 @@ function createRenderer(options) {
     let newEndVNode = newChildren[newEndIdx]
 
     while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+      // 增加两个判断分支，如果头尾部节点为 undefined，则说明该节点已经被处理过了，直接跳到下一个位置
       if (!oldStartVNode) {
         oldStartVNode = oldChildren[++oldStartIdx]
       } else if (!oldEndVNode) {
@@ -82,7 +84,7 @@ function createRenderer(options) {
         newEndVNode = newChildren[--newEndIdx]
       } else if (oldStartVNode.key === newEndVNode.key) {
         patch(oldStartVNode, newEndVNode, container)
-        insert(oldStartVNode.el, container, oldEndVNode.el.nextSibling)
+        insert(oldStartVNode.el, container, newEndVNode.el.nextSibling)
 
         oldStartVNode = oldChildren[++oldStartIdx]
         newEndVNode = newChildren[--newEndIdx]
@@ -98,26 +100,21 @@ function createRenderer(options) {
         const idxInOld = oldChildren.findIndex(
           node => node.key === newStartVNode.key
         )
+        // idxInOld 大于 0，说明找到了可复用的节点，并且需要将其对应的真实 DOM 移动到头部
         if (idxInOld > 0) {
+          // idxInOld 位置对应的 vnode 就是需要移动的节点
           const vnodeToMove = oldChildren[idxInOld]
           patch(vnodeToMove, newStartVNode, container)
+          // 将 vnodeToMove.el 移动到头部节点 oldStartVNode.el 之前，因此使用后者作为锚点
           insert(vnodeToMove.el, container, oldStartVNode.el)
+          // 由于位置 idxInOld 处的节点所对应的真实 DOM 已经移动到了别处，因此将其设置为 undefined
           oldChildren[idxInOld] = undefined
-        } else {
-          patch(null, newStartVNode, container, oldStartVNode.el)
+          // 最后更新 newStartIdx 到下一个位置
+          newStartVNode = newChildren[++newStartIdx]
         }
 
-        newStartVNode = newChildren[++newStartIdx]
       }
     }
-
-    if (oldEndIdx < oldStartIdx && newStartIdx <= newEndIdx) {
-      // 添加新节点
-      for (let i = newStartIdx; i <= newEndIdx; i++) {
-        patch(null, newChildren[i], container, oldStartVNode.el)
-      }
-    }
-
   }
 
   function patchElement(n1, n2) {
@@ -265,7 +262,8 @@ const VNode1 = {
   children: [
     { type: 'p', children: '1', key: 1 },
     { type: 'p', children: '2', key: 2 },
-    { type: 'p', children: '3', key: 3 }
+    { type: 'p', children: '3', key: 3 },
+    { type: 'p', children: '4', key: 4 }
   ]
 }
 renderer.render(VNode1, document.querySelector('#app'))
@@ -273,9 +271,9 @@ renderer.render(VNode1, document.querySelector('#app'))
 const VNode2 = {
   type: 'div',
   children: [
+    { type: 'p', children: '2', key: 2 },
     { type: 'p', children: '4', key: 4 },
     { type: 'p', children: '1', key: 1 },
-    { type: 'p', children: '2', key: 2 },
     { type: 'p', children: '3', key: 3 }
   ]
 }
