@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script>
+      class Scheduler {
+        constructor() {
+          this.isFlushing = false;
+          this.queue = new Set();
+          this.p = Promise.resolve();
+        }
+        add(fn) {
+          this.queue.add(fn);
+          this.flushQueue();
+        }
+        flushQueue() {
+          if (this.isFlushing) return;
+
+          this.isFlushing = true;
+
+          this.p
+            .then(() => {
+              const promises = Array.from(this.queue).map((fn) => fn());
+              return Promise.all(promises);
+            })
+            .finally(() => {
+              this.isFlushing = false;
+              this.queue.clear();
+            });
+        }
+      }
+
+      const scheduler = new Scheduler();
+
+      async function updateUI() {
+        console.log("Updating UI...");
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // 模拟异步操作
+        console.log("UI updated");
+      }
+
+      async function sendNetworkRequest() {
+        console.log("Sending network request...");
+        await new Promise((resolve) => setTimeout(resolve, 1500)); // 模拟异步操作
+        console.log("Network request sent");
+      }
+
+      async function logEvent() {
+        console.log("Logging event...");
+        await new Promise((resolve) => setTimeout(resolve, 500)); // 模拟异步操作
+        console.log("Event logged");
+      }
+
+      function handler() {
+        scheduler.add(updateUI);
+        scheduler.add(sendNetworkRequest);
+        scheduler.add(logEvent);
+      }
+
+      handler();
+      handler();
+      handler();
+
+      Promise.resolve().then(() => {
+        handler();
+        console.log("Promise");
+      });
+
+      // setTimeout(() => {
+      //   console.log("setTimeout");
+      //   handler();
+      // });
+    </script>
+  </body>
+</html>
