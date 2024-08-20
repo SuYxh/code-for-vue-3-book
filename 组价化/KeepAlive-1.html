@@ -1,25 +1,4 @@
-<style>
-  .box {
-    width: 100px;
-    height: 100px;
-    background-color: red;
-  }
-  .enter-active,
-  .leave-active {
-    transition: transform 1s ease-in-out;
-  }
-  .enter-from,
-  .leave-to {
-    transform: translateX(200px);
-  }
-  .enter-to,
-  .leave-from {
-    transform: translateX(0);
-  }
-</style>
-
 <div id="app"></div>
-<div id="container"></div>
 
 <script src="https://unpkg.com/@vue/reactivity@3.0.5/dist/reactivity.global.js"></script>
 <script>
@@ -104,7 +83,6 @@
 
     function mountElement(vnode, container, anchor) {
       const el = (vnode.el = createElement(vnode.type));
-
       if (typeof vnode.children === "string") {
         setElementText(el, vnode.children);
       } else if (Array.isArray(vnode.children)) {
@@ -119,15 +97,7 @@
         }
       }
 
-      const needTransition = vnode.transition;
-      if (needTransition) {
-        vnode.transition.beforeEnter(el);
-      }
-
       insert(el, container, anchor);
-      if (needTransition) {
-        vnode.transition.enter(el);
-      }
     }
 
     function patchChildren(n1, n2, container) {
@@ -155,9 +125,8 @@
       let j = 0;
       let oldVNode = oldChildren[j];
       let newVNode = newChildren[j];
-      const min = Math.min(oldChildren.length, newChildren.length);
       // while 循环向后遍历，直到遇到拥有不同 key 值的节点为止
-      while (j < min && oldVNode.key === newVNode.key) {
+      while (oldVNode.key === newVNode.key) {
         // 调用 patch 函数更新
         patch(oldVNode, newVNode, container);
         j++;
@@ -175,7 +144,7 @@
       newVNode = newChildren[newEnd];
 
       // while 循环向前遍历，直到遇到拥有不同 key 值的节点为止
-      while (oldEnd > 0 && newEnd > 0 && oldVNode.key === newVNode.key) {
+      while (oldVNode.key === newVNode.key) {
         // 调用 patch 函数更新
         patch(oldVNode, newVNode, container);
         oldEnd--;
@@ -203,7 +172,6 @@
       } else {
         // 构造 source 数组
         const count = newEnd - j + 1; // 新的一组子节点中剩余未处理节点的数量
-        if (count <= 0) return;
         const source = new Array(count);
         source.fill(-1);
 
@@ -299,13 +267,16 @@
       patchChildren(n1, n2, el);
     }
 
+    // 卸载操作
     function unmount(vnode) {
-      const needTransition = vnode.transition;
       if (vnode.type === Fragment) {
         vnode.children.forEach((c) => unmount(c));
         return;
       } else if (typeof vnode.type === "object") {
+        // vnode.shouldKeepAlive 是一个布尔值，用来标识该组件是否应该被 KeepAlive
         if (vnode.shouldKeepAlive) {
+          // 对于需要被 KeepAlive 的组件，我们不应该真的卸载它，而应调用该组件的父组件，
+          // 即 KeepAlive 组件的 _deActivate 函数使其失活
           vnode.keepAliveInstance._deActivate(vnode);
         } else {
           unmount(vnode.component.subTree);
@@ -314,12 +285,7 @@
       }
       const parent = vnode.el.parentNode;
       if (parent) {
-        const performRemove = () => parent.removeChild(vnode.el);
-        if (needTransition) {
-          vnode.transition.leave(vnode.el, performRemove);
-        } else {
-          performRemove();
-        }
+        parent.removeChild(vnode.el);
       }
     }
 
@@ -353,18 +319,6 @@
         } else {
           patchChildren(n1, n2, container);
         }
-      } else if (typeof type === "object" && type.__isTeleport) {
-        type.process(n1, n2, container, anchor, {
-          patch,
-          patchChildren,
-          move(vnode, container, anchor) {
-            insert(
-              vnode.component ? vnode.component.subTree.el : vnode.el,
-              container,
-              anchor
-            );
-          },
-        });
       } else if (typeof type === "object" || typeof type === "function") {
         // component
         if (!n1) {
@@ -477,6 +431,7 @@
         subTree: null,
         slots,
         mounted: [],
+        // 只有 KeepAlive 组件的实例下会有 keepAliveCtx 属性
         keepAliveCtx: null,
       };
 
@@ -674,17 +629,26 @@
   };
   const cache = new Map();
   const KeepAlive = {
+    // KeepAlive 组件独有的属性，用作标识
     __isKeepAlive: true,
-    props: {
-      include: RegExp,
-      exclude: RegExp,
-    },
     setup(props, { slots }) {
+      // 创建一个缓存对象
+      // key: vnode.type
+      // value: vnode
+      const cache = new Map();
+
+      // 当前 KeepAlive 组件的实例
       const instance = currentInstance;
+
+      // 对于 KeepAlive 组件来说，它的实例上存在特殊的 keepAliveCtx 对象，该对象由渲染器注入
+      // 该对象会暴露渲染器的一些内部方法，其中 move 函数用来将一段 DOM 移动到另一个容器中
       const { move, createElement } = instance.keepAliveCtx;
 
+      // 创建隐藏容器
       const storageContainer = createElement("div");
 
+      // KeepAlive 组件的实例上会被添加两个内部函数，分别是 _deActivate 和 _activate
+      // 这两个函数会在渲染器中被调用
       instance._deActivate = (vnode) => {
         move(vnode, storageContainer);
       };
@@ -694,159 +658,57 @@
       };
 
       return () => {
+        // KeepAlive 的默认插槽就是要被 KeepAlive 的组件
         let rawVNode = slots.default();
+
+        // 如果不是组件，直接渲染即可，因为非组件的虚拟节点无法被 KeepAlive
         if (typeof rawVNode.type !== "object") {
           return rawVNode;
         }
 
-        const name = rawVNode.type.name;
-        if (
-          name &&
-          ((props.include && !props.include.test(name)) ||
-            (props.exclude && props.exclude.test(name)))
-        ) {
-          return rawVNode;
-        }
-
+        // 在挂载时先获取缓存的组件 vnode
         const cachedVNode = cache.get(rawVNode.type);
+
         if (cachedVNode) {
+          // 如果有缓存的内容，则说明不应该执行挂载，而应该执行激活
+          // 继承组件实例
           rawVNode.component = cachedVNode.component;
+          // 在 vnode 上添加 keptAlive 属性，标记为 true，避免渲染器重新挂载它
           rawVNode.keptAlive = true;
         } else {
+          // 如果没有缓存，则将其添加到缓存中，这样下次激活组件时就不会执行新的挂载动作了
           cache.set(rawVNode.type, rawVNode);
         }
 
+        // 在组件 vnode 上添加 shouldKeepAlive 属性，并标记为 true，避免渲染器真的将组件卸载
         rawVNode.shouldKeepAlive = true;
+        // 将 KeepAlive 组件的实例也添加到 vnode 上，以便在渲染器中访问
         rawVNode.keepAliveInstance = instance;
 
+        // 渲染组件 vnode
         return rawVNode;
       };
     },
   };
 
-  const Teleport = {
-    __isTeleport: true,
-    process(n1, n2, container, anchor, internals) {
-      const { patch, patchChildren, move } = internals;
-      if (!n1) {
-        // 挂载
-        const target =
-          typeof n2.props.to === "string"
-            ? document.querySelector(n2.props.to)
-            : n2.props.to;
-        n2.children.forEach((c) => patch(null, c, target, anchor));
-      } else {
-        // 更新
-        patchChildren(n1, n2, container);
-        if (n2.props.to !== n1.props.to) {
-          const newTarget =
-            typeof n2.props.to === "string"
-              ? document.querySelector(n2.props.to)
-              : n2.props.to;
-          n2.children.forEach((c) => move(c, newTarget));
-        }
-      }
+  const CompVNode = {
+    type: KeepAlive,
+    props: {
+      exclude: /^My/,
+    },
+    children: {
+      default() {
+        return { type: MyComponent };
+      },
     },
   };
+  renderer.render(CompVNode, document.querySelector("#app"));
 
-  const Transition = {
-    name: "Transition",
-    setup(props, { slots }) {
-      return () => {
-        const innerVNode = slots.default();
+  setTimeout(() => {
+    renderer.render(null, document.querySelector("#app"));
+  }, 3000);
 
-        innerVNode.transition = {
-          beforeEnter(el) {
-            // 设置初始状态：添加 enter-from 和 enter-active 类
-            el.classList.add("enter-from");
-            el.classList.add("enter-active");
-          },
-          enter(el) {
-            // 在下一帧切换到结束状态;
-            nextFrame(() => {
-              // 移除 enter-from 类，添加 enter-to 类
-              el.classList.remove("enter-from");
-              el.classList.add("enter-to");
-
-              // 移除 enter-from 类，添加 enter-to 类
-              el.addEventListener("transitionend", () => {
-                el.classList.remove("enter-to");
-                el.classList.remove("enter-active");
-              });
-            });
-          },
-          leave(el, performRemove) {
-            // 设置离场过渡的初始状态：添加 leave-from 和 leave-active 类
-            el.classList.add("leave-from");
-            el.classList.add("leave-active");
-
-            // 强制 reflow，使得初始状态生效
-            // document.body.offsetHeight
-
-            // 在下一帧修改状态;
-            nextFrame(() => {
-              el.classList.remove("leave-from");
-              el.classList.add("leave-to");
-
-              el.addEventListener("transitionend", () => {
-                el.classList.remove("leave-to");
-                el.classList.remove("leave-active");
-
-                // 调用 transition.leave 钩子函数的第二个参数，完成 DOM 元素的卸载
-                performRemove();
-              });
-            });
-          },
-        };
-
-        return innerVNode;
-      };
-    },
-  };
-
-  const App = {
-    name: "App",
-    setup() {
-      const toggle = ref(true);
-
-      setTimeout(() => {
-        toggle.value = false;
-      }, 2000);
-
-      return () => {
-        return {
-          type: Transition,
-          children: {
-            default() {
-              return toggle.value
-                ? { type: "div", props: { class: "box" } }
-                : { type: Text, chidlren: "" };
-            },
-          },
-        };
-      };
-    },
-  };
-  renderer.render({ type: App }, document.querySelector("#app"));
-
-  // const CompVNode2 = {
-  //   type: Teleport,
-  //   props: {
-  //     to: '#container'
-  //   },
-  //   children: [
-  //     { type: 'h1', children: 'A big Title' },
-  //     { type: 'p', children: 'a small content' }
-  //   ]
-  // }
-
-  // setTimeout(() => {
-  //   renderer.render(CompVNode2, document.querySelector('#app'))
-  // }, 1000);
-
-  function nextFrame(cb) {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(cb);
-    });
-  }
+  setTimeout(() => {
+    renderer.render(CompVNode, document.querySelector("#app"));
+  }, 5000);
 </script>
